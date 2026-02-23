@@ -1,93 +1,172 @@
-# second-test-project
+# Agentic Workflows Test Project
 
+This repository demonstrates **GitHub Copilot Agentic Workflows** — AI-powered automation that runs directly in GitHub Actions, triggered by slash commands, schedules, or events.
 
-
-## Getting started
-
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
-
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
-
-## Add your files
-
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
+## What's in this repo
 
 ```
-cd existing_repo
-git remote add origin https://gitlab.expert-services.io/alex-d-group/second-test-project.git
-git branch -M main
-git push -uf origin main
+.
+├── .github/workflows/
+│   └── issue-triage.md          ← Agent definition (you write this)
+│       ↓ gh aw compile
+│   └── issue-triage.lock.yml    ← Auto-generated Actions workflow (don't edit)
+└── knowledge-base/
+    └── triage-guidelines.md     ← Knowledge base (reference data for the agent)
 ```
 
-## Integrate with your tools
+## Architecture
 
-- [ ] [Set up project integrations](https://gitlab.expert-services.io/alex-d-group/second-test-project/-/settings/integrations)
+### The 3 Pieces
 
-## Collaborate with your team
+| File | What it is | Who writes it |
+|------|-----------|---------------|
+| `.github/workflows/<name>.md` | **Agent definition** — the prompt, triggers, permissions, and safe outputs | You |
+| `.github/workflows/<name>.lock.yml` | **Compiled workflow** — the actual GitHub Actions YAML that runs the agent | `gh aw compile` (auto-generated) |
+| `knowledge-base/*.md` | **Knowledge base** — reference data the agent reads at runtime via MCP | You |
 
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+### How It Works
 
-## Test and Deploy
+```
+User types /triage on an issue
+        │
+        ▼
+GitHub Actions triggers the compiled .lock.yml workflow
+        │
+        ▼
+The agent reads the .md prompt and gets its instructions
+        │
+        ▼
+Agent uses MCP tools to:
+  1. Read issue body + comments (mcp_github_get_file_contents / gh CLI)
+  2. Fetch knowledge base docs (mcp_github_get_file_contents)
+  3. Synthesize a response
+  4. Post a comment via safe outputs (add-comment)
+```
 
-Use the built-in continuous integration in GitLab.
+### Key Concepts
 
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
+**Frontmatter** — The YAML block at the top of the `.md` file defines:
+- `on:` — What triggers the agent (slash commands, schedules, PR events, etc.)
+- `permissions:` — GitHub token permissions
+- `tools:` — Which MCP toolsets the agent can use
+- `safe-outputs:` — What actions the agent can take (add comments, create issues, etc.)
 
-***
+**Safe Outputs** — The agent can't directly modify GitHub resources. It must use pre-defined safe output tools:
+- `add-comment` — Post a comment on an issue/PR
+- `create-issue` — Create a new issue
+- `noop` — Log that no action was needed (transparency)
 
-# Editing this README
+**Knowledge Base via MCP** — Instead of hardcoding data into the prompt, agents fetch reference documents at runtime using `mcp_github_get_file_contents`. This means:
+- The prompt stays clean and focused on instructions
+- Reference data can be updated independently
+- Multiple agents can share the same knowledge base
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+## The Example: Issue Triage Agent
 
-## Suggestions for a good README
+### What it does
+When someone types `/triage` on an issue with the `needs-triage` label, the agent:
+1. Reads the issue body and comments
+2. Fetches `knowledge-base/triage-guidelines.md` for priority definitions, label taxonomy, and team routing
+3. Posts a structured triage recommendation (priority, labels, assignee, SLA)
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+### Agent Definition: `.github/workflows/issue-triage.md`
 
-## Name
-Choose a self-explaining name for your project.
+The prompt instructs the agent to:
+- **Gate check**: Only run on issues with the `needs-triage` label
+- **Fetch knowledge base**: Read triage guidelines before making decisions
+- **Gather context**: Read the issue body and comments
+- **Generate recommendation**: Post a structured triage comment grounded in the knowledge base
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+### Knowledge Base: `knowledge-base/triage-guidelines.md`
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+Contains:
+- Priority matrix (P0-P3) with impact/urgency definitions
+- Label taxonomy (type, area, status labels)
+- Team ownership map with routing rules
+- SLA targets per priority level
+- Triage checklist
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+## Getting Started
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+### 1. Install the `gh aw` CLI extension
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+```bash
+gh extension install github/gh-aw
+```
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+### 2. Compile the agent
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+```bash
+gh aw compile
+```
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+This reads `.github/workflows/issue-triage.md` and generates `.github/workflows/issue-triage.lock.yml`.
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+### 3. Push and test
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+```bash
+git add .github/workflows/
+git commit -m "Add issue triage agent"
+git push
+```
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+Then create an issue with the `needs-triage` label and comment `/triage`.
 
-## License
-For open source projects, say how it is licensed.
+## Comparison with `actions-migrations-via-copilot`
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+This project follows the same pattern used by [actions-migrations-via-copilot](https://github.com/github/actions-migrations-via-copilot):
+
+| Pattern | migrations-via-copilot | This project |
+|---------|----------------------|---------------|
+| Agent definitions | `agents/*.md` | `.github/workflows/*.md` |
+| Knowledge base | `knowledge/` | `knowledge-base/` |
+| KB access method | `mcp_github_get_file_contents` | `mcp_github_get_file_contents` |
+| Trigger | Copilot Chat invocation | Slash commands / schedules |
+| Output | File changes + migration report | Issue comments |
+
+The key difference: `actions-migrations-via-copilot` agents run in **Copilot Chat** (interactive), while agentic workflow agents run in **GitHub Actions** (event-driven, automated).
+
+## Creating Your Own Agent
+
+1. **Create `.github/workflows/your-agent.md`** with frontmatter + prompt
+2. **Create `knowledge-base/your-data.md`** with reference data
+3. **Run `gh aw compile`** to generate the lock file
+4. **Push and test**
+
+### Frontmatter Reference
+
+```yaml
+---
+on:
+  # Slash command trigger (must be in an issue or PR comment)
+  slash_command:
+    name: your-command      # invoked as /your-command
+    events: [issue_comment]
+  
+  # Schedule trigger  
+  schedule: daily            # runs daily
+  
+  # Event triggers
+  issues:
+    types: [opened, labeled]
+  pull_request:
+    types: [opened, synchronize]
+
+permissions: read-all        # GitHub token permissions
+
+tools:
+  toolsets: default          # MCP toolsets available to the agent
+
+safe-outputs:                # What the agent can do
+  add-comment:               # Post comments
+  create-issue:              # Create issues
+    close-older-issues: true # Auto-close previous issues from this workflow
+  noop:                      # Log no-action transparency message
+---
+```
+
+## Resources
+
+- [Agentic Workflows Documentation](https://github.com/github/gh-aw)
+- [GitHub MCP Server](https://github.com/github/github-mcp-server)
+- [actions-migrations-via-copilot](https://github.com/github/actions-migrations-via-copilot) — Production example of knowledge-base-driven agents
